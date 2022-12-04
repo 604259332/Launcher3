@@ -24,6 +24,7 @@ import android.animation.TimeInterpolator;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -148,6 +149,8 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
 
     protected final Rect mInsets = new Rect();
     protected boolean mIsRtl;
+
+    protected boolean mLoopWorkspace=true;
 
     // Similar to the platform implementation of isLayoutValid();
     protected boolean mIsLayoutValid;
@@ -357,6 +360,43 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
     }
 
     @Override
+    protected void dispatchDraw(Canvas canvas) {
+        super.dispatchDraw(canvas);
+
+        drawLoopPageIfNeed(canvas);
+    }
+
+    /**
+     * @info Draw last child when xBeforeFirstPage ,and draw first child when xAfterLastPage.
+     * Used canvas translate for draw last child or first child when loop page.
+     * @param canvas
+     */
+    private void drawLoopPageIfNeed(Canvas canvas){
+        mOverScrollX = getScrollX();
+        boolean isXBeforeFirstPage = mIsRtl ? (mOverScrollX > mMaxScrollX) : (mOverScrollX < 0);
+        boolean isXAfterLastPage = mIsRtl ? (mOverScrollX < 0) : (mOverScrollX > mMaxScrollX);
+
+        if(isXBeforeFirstPage || isXAfterLastPage){
+            long mDrawingTime = getDrawingTime();
+            int childCount = getChildCount();
+
+            canvas.save();
+            int offset = (mIsRtl?-childCount:childCount)*getMeasuredWidth();
+            if(isXBeforeFirstPage){
+                canvas.translate(-offset,0);
+                drawChild(canvas,getPageAt(childCount-1),mDrawingTime);
+            }else{
+                canvas.translate(offset,0);
+                drawChild(canvas,getPageAt(0),mDrawingTime);
+            }
+            canvas.restore();
+
+        }
+
+
+    }
+
+    @Override
     public void scrollBy(int x, int y) {
         scrollTo(getUnboundedScrollX() + x, getScrollY() + y);
     }
@@ -379,23 +419,33 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
         boolean isXBeforeFirstPage = mIsRtl ? (x > mMaxScrollX) : (x < 0);
         boolean isXAfterLastPage = mIsRtl ? (x < 0) : (x > mMaxScrollX);
         if (isXBeforeFirstPage) {
-            super.scrollTo(mIsRtl ? mMaxScrollX : 0, y);
-            if (mAllowOverScroll) {
-                mWasInOverscroll = true;
-                if (mIsRtl) {
-                    overScroll(x - mMaxScrollX);
-                } else {
-                    overScroll(x);
+            if(mLoopWorkspace){
+                super.scrollTo(x, y);
+
+
+            }else{
+                super.scrollTo(mIsRtl ? mMaxScrollX : 0, y);
+                if (mAllowOverScroll) {
+                    mWasInOverscroll = true;
+                    if (mIsRtl) {
+                        overScroll(x - mMaxScrollX);
+                    } else {
+                        overScroll(x);
+                    }
                 }
             }
         } else if (isXAfterLastPage) {
-            super.scrollTo(mIsRtl ? 0 : mMaxScrollX, y);
-            if (mAllowOverScroll) {
-                mWasInOverscroll = true;
-                if (mIsRtl) {
-                    overScroll(x);
-                } else {
-                    overScroll(x - mMaxScrollX);
+            if(mLoopWorkspace){
+                super.scrollTo(x, y);
+            }else{
+                super.scrollTo(mIsRtl ? 0 : mMaxScrollX, y);
+                if (mAllowOverScroll) {
+                    mWasInOverscroll = true;
+                    if (mIsRtl) {
+                        overScroll(x);
+                    } else {
+                        overScroll(x - mMaxScrollX);
+                    }
                 }
             }
         } else {
