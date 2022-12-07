@@ -150,7 +150,11 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
     protected final Rect mInsets = new Rect();
     protected boolean mIsRtl;
 
+    //for cycle page begin
     protected boolean mLoopWorkspace=true;
+    protected boolean mCycleXBeforeFirstPage;
+    protected boolean mCycleXAfterLastPage;
+    //for cycle page end
 
     // Similar to the platform implementation of isLayoutValid();
     protected boolean mIsLayoutValid;
@@ -363,7 +367,10 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
     protected void dispatchDraw(Canvas canvas) {
         super.dispatchDraw(canvas);
 
-        drawLoopPageIfNeed(canvas);
+        //for cycle page
+        if(getChildCount()>1){
+            drawLoopPageIfNeed(canvas);
+        }
     }
 
     /**
@@ -419,10 +426,9 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
         boolean isXBeforeFirstPage = mIsRtl ? (x > mMaxScrollX) : (x < 0);
         boolean isXAfterLastPage = mIsRtl ? (x < 0) : (x > mMaxScrollX);
         if (isXBeforeFirstPage) {
-            if(mLoopWorkspace){
+            //for cycle page
+            if(mLoopWorkspace && getChildCount() > 1){
                 super.scrollTo(x, y);
-
-
             }else{
                 super.scrollTo(mIsRtl ? mMaxScrollX : 0, y);
                 if (mAllowOverScroll) {
@@ -435,7 +441,8 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
                 }
             }
         } else if (isXAfterLastPage) {
-            if(mLoopWorkspace){
+            //for cycle page
+            if(mLoopWorkspace && getChildCount() > 1){
                 super.scrollTo(x, y);
             }else{
                 super.scrollTo(mIsRtl ? 0 : mMaxScrollX, y);
@@ -1145,6 +1152,9 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
 
         case MotionEvent.ACTION_MOVE:
             if (mTouchState == TOUCH_STATE_SCROLLING) {
+                mCycleXBeforeFirstPage = false;
+                mCycleXAfterLastPage = false;
+
                 // Scroll to follow the motion event
                 final int pointerIndex = ev.findPointerIndex(mActivePointerId);
 
@@ -1203,13 +1213,25 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
                     boolean isDeltaXLeft = mIsRtl ? deltaX > 0 : deltaX < 0;
                     boolean isVelocityXLeft = mIsRtl ? velocityX > 0 : velocityX < 0;
                     if (((isSignificantMove && !isDeltaXLeft && !isFling) ||
-                            (isFling && !isVelocityXLeft)) && mCurrentPage > 0) {
-                        finalPage = returnToOriginalPage ? mCurrentPage : mCurrentPage - 1;
+                            (isFling && !isVelocityXLeft)) && (mCurrentPage > 0 || mLoopWorkspace && getChildCount()>1)) {
+                        //for cycle page
+                        if(mCurrentPage > 0){
+                            finalPage = returnToOriginalPage ? mCurrentPage : mCurrentPage - 1;
+                        } else {
+                            finalPage = returnToOriginalPage ? mCurrentPage : getChildCount() - 1;
+                            mCycleXAfterLastPage = true;
+                        }
                         snapToPageWithVelocity(finalPage, velocityX);
                     } else if (((isSignificantMove && isDeltaXLeft && !isFling) ||
                             (isFling && isVelocityXLeft)) &&
-                            mCurrentPage < getChildCount() - 1) {
-                        finalPage = returnToOriginalPage ? mCurrentPage : mCurrentPage + 1;
+                            (mCurrentPage < getChildCount() - 1 || mLoopWorkspace && getChildCount()>1)) {
+                        //for cycle page
+                        if(mCurrentPage < getChildCount() - 1){
+                            finalPage = returnToOriginalPage ? mCurrentPage : mCurrentPage + 1;
+                        }else{
+                            finalPage = returnToOriginalPage ? mCurrentPage : 0;
+                            mCycleXBeforeFirstPage = true;
+                        }
                         snapToPageWithVelocity(finalPage, velocityX);
                     } else {
                         snapToDestination();
@@ -1440,7 +1462,20 @@ public abstract class PagedView<T extends View & PageIndicator> extends ViewGrou
         whichPage = validateNewPage(whichPage);
         int halfScreenSize = getMeasuredWidth() / 2;
 
+        //for cycle page begin
         final int newX = getScrollForPage(whichPage);
+        int mscrollX = getScrollX();
+        if (mLoopWorkspace && getChildCount() > 1 &&
+                (mCycleXAfterLastPage || mCycleXBeforeFirstPage)) {
+            if (mscrollX < halfScreenSize) {
+                mUnboundedScrollX = getChildCount() * getMeasuredWidth()
+                        + mscrollX;
+            } else if (mscrollX > (mMaxScrollX - halfScreenSize)) {
+                 mUnboundedScrollX = mMaxScrollX - mUnboundedScrollX;
+            }
+        }
+        //for cycle page end
+
         int delta = newX - getUnboundedScrollX();
         int duration = 0;
 
